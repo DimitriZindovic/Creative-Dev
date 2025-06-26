@@ -1,6 +1,109 @@
 import "normalize.css";
 import "./style.css";
 
+// ==================== TYPES ET CONSTANTES ====================
+
+interface FrameDimensions {
+  width: number;
+  height: number;
+  startX: number;
+  startY: number;
+  thickness: number;
+}
+
+interface CourtDimensions {
+  width: number;
+  height: number;
+  startX: number;
+  startY: number;
+  singleCourtHeight: number;
+  singleStartY: number;
+  serviceLineDistance: number;
+  centerX: number;
+  centerY: number;
+}
+
+interface ServiceBoxDimensions {
+  width: number;
+  height: number;
+}
+
+interface AnimationConfig {
+  duration: number;
+  doorPhaseRatio: number;
+  zoomStartRatio: number;
+  netStartRatio: number;
+  maxZoomFactor: number;
+}
+
+const COLORS = {
+  clay: "#C95917",
+  grass: "#00503C",
+  white: "#FFFFFF",
+  frameGold: "#D4AF37",
+  frameShadow: "#B8860B",
+} as const;
+
+const ANIMATION_CONFIG: AnimationConfig = {
+  duration: 7000,
+  doorPhaseRatio: 0.9,
+  zoomStartRatio: 0.5,
+  netStartRatio: 0.7,
+  maxZoomFactor: 20,
+};
+
+// ==================== UTILITAIRES ====================
+
+function easeInOutSine(t: number): number {
+  return -(Math.cos(Math.PI * t) - 1) / 2;
+}
+
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+function getFrameDimensions(canvas: HTMLCanvasElement): FrameDimensions {
+  return {
+    width: canvas.width * 0.9,
+    height: canvas.height * 0.8,
+    startX: (canvas.width - canvas.width * 0.9) / 2,
+    startY: (canvas.height - canvas.height * 0.8) / 2,
+    thickness: 20,
+  };
+}
+
+function getCourtDimensions(
+  canvas: HTMLCanvasElement,
+  frame: FrameDimensions
+): CourtDimensions {
+  const courtWidth = frame.width * 0.85;
+  const courtHeight = frame.height * 0.8;
+  const startX = frame.startX + (frame.width - courtWidth) / 2;
+  const startY = frame.startY + (frame.height - courtHeight) / 2;
+  const singleCourtHeight = courtHeight * 0.77;
+
+  return {
+    width: courtWidth,
+    height: courtHeight,
+    startX,
+    startY,
+    singleCourtHeight,
+    singleStartY: startY + (courtHeight - singleCourtHeight) / 2,
+    serviceLineDistance: courtWidth * 0.25,
+    centerX: startX + courtWidth / 2,
+    centerY: startY + courtHeight / 2,
+  };
+}
+
+function getServiceBoxDimensions(court: CourtDimensions): ServiceBoxDimensions {
+  return {
+    width: court.centerX - (court.startX + court.serviceLineDistance),
+    height: court.centerY - court.singleStartY,
+  };
+}
+
+// ==================== FONCTIONS DE DESSIN ====================
+
 function drawTennisCourtLines(
   canvas: HTMLCanvasElement,
   showAllLines: boolean = false,
@@ -9,486 +112,423 @@ function drawTennisCourtLines(
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
-  // Dimensions du cadre tableau
-  const frameWidth = canvas.width * 0.9;
-  const frameHeight = canvas.height * 0.8;
-  const frameStartX = (canvas.width - frameWidth) / 2;
-  const frameStartY = (canvas.height - frameHeight) / 2;
+  const frame = getFrameDimensions(canvas);
+  const court = getCourtDimensions(canvas, frame);
 
-  const courtWidth = frameWidth * 0.85; // Terrain plus petit pour laisser place au cadre
-  const courtHeight = frameHeight * 0.8;
-  const startX = frameStartX + (frameWidth - courtWidth) / 2;
-  const startY = frameStartY + (frameHeight - courtHeight) / 2;
-
-  const singleCourtHeight = courtHeight * 0.77;
-  const singleStartY = startY + (courtHeight - singleCourtHeight) / 2;
-  const serviceLineDistance = courtWidth * 0.25;
-  const centerX = startX + courtWidth / 2;
-  const centerY = startY + courtHeight / 2;
-
-  // Dessiner seulement les lignes (le cadre et la texture terre battue sont déjà appliqués)
   ctx.save();
-  ctx.strokeStyle = "#FFFFFF";
+  ctx.strokeStyle = COLORS.white;
   ctx.lineWidth = 4;
   ctx.lineCap = "round";
-  ctx.globalAlpha = fadeProgress; // Appliquer l'opacité progressive
+  ctx.globalAlpha = fadeProgress;
 
-  // Contour extérieur du terrain
-  ctx.strokeRect(startX, startY, courtWidth, courtHeight);
-
-  // Contour du terrain simple
-  ctx.strokeRect(startX, singleStartY, courtWidth, singleCourtHeight);
+  // Contours du terrain
+  ctx.strokeRect(court.startX, court.startY, court.width, court.height);
+  ctx.strokeRect(
+    court.startX,
+    court.singleStartY,
+    court.width,
+    court.singleCourtHeight
+  );
 
   if (showAllLines) {
-    // Quand le terrain est entièrement orange, dessiner TOUTES les lignes
-
-    // Ligne centrale (filet) - ligne complète
-    ctx.beginPath();
-    ctx.moveTo(centerX, startY);
-    ctx.lineTo(centerX, startY + courtHeight);
-    ctx.stroke();
-
-    // Lignes de service - lignes complètes
-    // Ligne de service gauche - complète
-    ctx.beginPath();
-    ctx.moveTo(startX + serviceLineDistance, singleStartY);
-    ctx.lineTo(startX + serviceLineDistance, singleStartY + singleCourtHeight);
-    ctx.stroke();
-
-    // Ligne de service droite - complète
-    ctx.beginPath();
-    ctx.moveTo(startX + courtWidth - serviceLineDistance, singleStartY);
-    ctx.lineTo(
-      startX + courtWidth - serviceLineDistance,
-      singleStartY + singleCourtHeight
-    );
-    ctx.stroke();
-
-    // Ligne centrale de service - complète
-    ctx.beginPath();
-    ctx.moveTo(startX + serviceLineDistance, centerY);
-    ctx.lineTo(startX + courtWidth - serviceLineDistance, centerY);
-    ctx.stroke();
+    drawAllCourtLines(ctx, court);
   } else {
-    // Mode normal : éviter les zones vertes
-
-    // Ligne centrale (filet) - éviter les zones vertes
-    ctx.beginPath();
-    ctx.moveTo(centerX, startY);
-    ctx.lineTo(centerX, singleStartY);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(centerX, singleStartY + singleCourtHeight);
-    ctx.lineTo(centerX, startY + courtHeight);
-    ctx.stroke();
-
-    // Lignes de service - éviter les zones vertes
-    // Ligne de service gauche - parties haute et basse seulement
-    ctx.beginPath();
-    ctx.moveTo(startX + serviceLineDistance, singleStartY);
-    ctx.lineTo(startX + serviceLineDistance, centerY);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(startX + serviceLineDistance, centerY);
-    ctx.lineTo(startX + serviceLineDistance, singleStartY + singleCourtHeight);
-    ctx.stroke();
-
-    // Ligne de service droite - parties haute et basse seulement
-    ctx.beginPath();
-    ctx.moveTo(startX + courtWidth - serviceLineDistance, singleStartY);
-    ctx.lineTo(startX + courtWidth - serviceLineDistance, centerY);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(startX + courtWidth - serviceLineDistance, centerY);
-    ctx.lineTo(
-      startX + courtWidth - serviceLineDistance,
-      singleStartY + singleCourtHeight
-    );
-    ctx.stroke();
-
-    // Ligne centrale de service - éviter les zones vertes en ne dessinant que les extrémités
-    ctx.beginPath();
-    ctx.moveTo(startX + serviceLineDistance, centerY);
-    ctx.lineTo(
-      startX +
-        serviceLineDistance +
-        (centerX - (startX + serviceLineDistance)) * 0.1,
-      centerY
-    );
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(
-      centerX + (centerX - (startX + serviceLineDistance)) * 0.9,
-      centerY
-    );
-    ctx.lineTo(startX + courtWidth - serviceLineDistance, centerY);
-    ctx.stroke();
+    drawPartialCourtLines(ctx, court);
   }
 
   ctx.restore();
 }
 
+function drawAllCourtLines(
+  ctx: CanvasRenderingContext2D,
+  court: CourtDimensions
+) {
+  // Ligne centrale (filet)
+  ctx.beginPath();
+  ctx.moveTo(court.centerX, court.startY);
+  ctx.lineTo(court.centerX, court.startY + court.height);
+  ctx.stroke();
+
+  // Lignes de service
+  drawServiceLine(
+    ctx,
+    court.startX + court.serviceLineDistance,
+    court.singleStartY,
+    court.singleCourtHeight
+  );
+  drawServiceLine(
+    ctx,
+    court.startX + court.width - court.serviceLineDistance,
+    court.singleStartY,
+    court.singleCourtHeight
+  );
+
+  // Ligne centrale de service
+  ctx.beginPath();
+  ctx.moveTo(court.startX + court.serviceLineDistance, court.centerY);
+  ctx.lineTo(
+    court.startX + court.width - court.serviceLineDistance,
+    court.centerY
+  );
+  ctx.stroke();
+}
+
+function drawPartialCourtLines(
+  ctx: CanvasRenderingContext2D,
+  court: CourtDimensions
+) {
+  // Ligne centrale évitant les zones vertes
+  ctx.beginPath();
+  ctx.moveTo(court.centerX, court.startY);
+  ctx.lineTo(court.centerX, court.singleStartY);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(court.centerX, court.singleStartY + court.singleCourtHeight);
+  ctx.lineTo(court.centerX, court.startY + court.height);
+  ctx.stroke();
+
+  // Lignes de service partielles
+  drawPartialServiceLines(ctx, court);
+}
+
+function drawServiceLine(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  startY: number,
+  height: number
+) {
+  ctx.beginPath();
+  ctx.moveTo(x, startY);
+  ctx.lineTo(x, startY + height);
+  ctx.stroke();
+}
+
+function drawPartialServiceLines(
+  ctx: CanvasRenderingContext2D,
+  court: CourtDimensions
+) {
+  const leftServiceX = court.startX + court.serviceLineDistance;
+  const rightServiceX = court.startX + court.width - court.serviceLineDistance;
+
+  // Lignes de service gauche et droite (parties haute et basse)
+  [leftServiceX, rightServiceX].forEach((x) => {
+    ctx.beginPath();
+    ctx.moveTo(x, court.singleStartY);
+    ctx.lineTo(x, court.centerY);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(x, court.centerY);
+    ctx.lineTo(x, court.singleStartY + court.singleCourtHeight);
+    ctx.stroke();
+  });
+
+  // Ligne centrale de service (extrémités seulement)
+  const serviceLineLength = court.centerX - leftServiceX;
+
+  ctx.beginPath();
+  ctx.moveTo(leftServiceX, court.centerY);
+  ctx.lineTo(leftServiceX + serviceLineLength * 0.1, court.centerY);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(court.centerX + serviceLineLength * 0.9, court.centerY);
+  ctx.lineTo(rightServiceX, court.centerY);
+  ctx.stroke();
+}
+
+// ==================== ANIMATION PRINCIPALE ====================
+
+class RolandGarrosAnimation {
+  private canvas: HTMLCanvasElement;
+  private ctx: CanvasRenderingContext2D;
+  private frame: FrameDimensions;
+  private court: CourtDimensions;
+  private animationProgress = 0;
+  private startTime: number;
+
+  constructor(canvas: HTMLCanvasElement) {
+    this.canvas = canvas;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Impossible d'obtenir le contexte 2D");
+
+    this.ctx = ctx;
+    this.frame = getFrameDimensions(canvas);
+    this.court = getCourtDimensions(canvas, this.frame);
+    this.startTime = Date.now();
+  }
+
+  start() {
+    this.drawInitialState();
+    setTimeout(() => this.animate(), 2000);
+  }
+
+  private drawInitialState() {
+    drawFrame(this.canvas);
+
+    this.ctx.save();
+    this.ctx.beginPath();
+    this.ctx.rect(
+      this.frame.startX + this.frame.thickness,
+      this.frame.startY + this.frame.thickness,
+      this.frame.width - 2 * this.frame.thickness,
+      this.frame.height - 2 * this.frame.thickness
+    );
+    this.ctx.clip();
+
+    this.ctx.fillStyle = COLORS.clay;
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    drawTennisCourtLines(this.canvas, true, 1);
+
+    this.ctx.restore();
+  }
+
+  private animate() {
+    const currentTime = Date.now();
+    const elapsed = currentTime - this.startTime;
+    this.animationProgress = Math.min(elapsed / ANIMATION_CONFIG.duration, 1);
+
+    const easedProgress = easeInOutSine(this.animationProgress);
+
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    drawFrame(this.canvas);
+
+    this.drawGreenBackground();
+
+    if (easedProgress > ANIMATION_CONFIG.zoomStartRatio) {
+      this.drawZoomPhase(easedProgress);
+    } else {
+      this.drawDoorPhase(easedProgress);
+    }
+
+    if (this.animationProgress < 1) {
+      requestAnimationFrame(() => this.animate());
+    }
+  }
+
+  private drawGreenBackground() {
+    // Dessiner d'abord le fond orange (terre battue) sur toute la zone du cadre
+    this.ctx.fillStyle = COLORS.clay;
+    this.ctx.fillRect(
+      this.frame.startX + this.frame.thickness,
+      this.frame.startY + this.frame.thickness,
+      this.frame.width - 2 * this.frame.thickness,
+      this.frame.height - 2 * this.frame.thickness
+    );
+
+    // Dessiner le terrain de tennis avec toutes les lignes
+    drawTennisCourtLines(this.canvas, true, 1);
+
+    // Puis dessiner les zones vertes spécifiquement dans les carrés de service
+    const serviceBox = getServiceBoxDimensions(this.court);
+    this.ctx.fillStyle = COLORS.grass;
+
+    // Carré de service gauche (haut et bas)
+    this.ctx.fillRect(
+      this.court.startX + this.court.serviceLineDistance,
+      this.court.singleStartY,
+      serviceBox.width,
+      serviceBox.height * 2
+    );
+
+    // Carré de service droit (haut et bas)
+    this.ctx.fillRect(
+      this.court.centerX,
+      this.court.singleStartY,
+      serviceBox.width,
+      serviceBox.height * 2
+    );
+  }
+
+  private drawDoorPhase(easedProgress: number) {
+    const doorProgress = Math.min(
+      easedProgress / ANIMATION_CONFIG.doorPhaseRatio,
+      1
+    );
+
+    // Calculer les dimensions des carrés de service
+    const serviceBox = getServiceBoxDimensions(this.court);
+    const maxSlideDistance = serviceBox.width * 0.85;
+    const currentSlideDistance = doorProgress * maxSlideDistance;
+
+    this.drawServiceBoxDoor("left", currentSlideDistance, serviceBox);
+    this.drawServiceBoxDoor("right", currentSlideDistance, serviceBox);
+  }
+
+  private drawServiceBoxDoor(
+    side: "left" | "right",
+    slideDistance: number,
+    serviceBox: ServiceBoxDimensions
+  ) {
+    const doorWidth = serviceBox.width;
+    const doorHeight = serviceBox.height * 2; // Couvre les deux carrés de service (haut et bas)
+
+    let doorX: number;
+    if (side === "left") {
+      doorX =
+        this.court.startX + this.court.serviceLineDistance - slideDistance;
+    } else {
+      doorX = this.court.centerX + slideDistance;
+    }
+
+    const doorY = this.court.singleStartY;
+
+    // Vérifier si la porte est encore visible
+    const isVisible =
+      side === "left"
+        ? doorX + doorWidth > this.court.startX + this.court.serviceLineDistance
+        : doorX < this.court.centerX + serviceBox.width;
+
+    if (isVisible) {
+      // Dessiner la porte orange avec le terrain de tennis
+      this.ctx.fillStyle = COLORS.clay;
+      this.ctx.fillRect(doorX, doorY, doorWidth, doorHeight);
+
+      // Sauvegarder le contexte pour dessiner le terrain dans la porte
+      this.ctx.save();
+      this.ctx.beginPath();
+      this.ctx.rect(doorX, doorY, doorWidth, doorHeight);
+      this.ctx.clip();
+
+      // Dessiner les lignes du terrain de tennis dans la zone de la porte
+      drawTennisCourtLines(this.canvas, true, 1);
+
+      this.ctx.restore();
+
+      // Bordure de la porte
+      this.ctx.strokeStyle = COLORS.white;
+      this.ctx.lineWidth = 3;
+      this.ctx.strokeRect(doorX, doorY, doorWidth, doorHeight);
+
+      // Ligne de séparation au milieu (entre les deux carrés de service)
+      this.ctx.beginPath();
+      this.ctx.moveTo(doorX, this.court.centerY);
+      this.ctx.lineTo(doorX + doorWidth, this.court.centerY);
+      this.ctx.stroke();
+    }
+  }
+
+  private drawZoomPhase(easedProgress: number) {
+    const zoomProgress =
+      (easedProgress - ANIMATION_CONFIG.zoomStartRatio) /
+      (1 - ANIMATION_CONFIG.zoomStartRatio);
+    const smoothZoomProgress = easeInOutSine(zoomProgress);
+    const zoomFactor = 1 + smoothZoomProgress * ANIMATION_CONFIG.maxZoomFactor;
+
+    this.ctx.save();
+    this.ctx.translate(this.court.centerX, this.court.centerY);
+    this.ctx.scale(zoomFactor, zoomFactor);
+    this.ctx.translate(-this.court.centerX, -this.court.centerY);
+
+    // Dessiner le fond orange et le terrain complet
+    this.ctx.fillStyle = COLORS.clay;
+    this.ctx.fillRect(
+      this.frame.startX + this.frame.thickness,
+      this.frame.startY + this.frame.thickness,
+      this.frame.width - 2 * this.frame.thickness,
+      this.frame.height - 2 * this.frame.thickness
+    );
+
+    // Dessiner le terrain de tennis avec toutes les lignes pendant le zoom
+    drawTennisCourtLines(this.canvas, true, 1);
+
+    // Dessiner les zones vertes par-dessus
+    const serviceBox = getServiceBoxDimensions(this.court);
+    this.ctx.fillStyle = COLORS.grass;
+    this.ctx.fillRect(
+      this.court.startX + this.court.serviceLineDistance,
+      this.court.singleStartY,
+      serviceBox.width,
+      serviceBox.height * 2
+    );
+    this.ctx.fillRect(
+      this.court.centerX,
+      this.court.singleStartY,
+      serviceBox.width,
+      serviceBox.height * 2
+    );
+
+    // Dessiner les portes avec opacité décroissante
+    if (zoomProgress < 0.9) {
+      const doorOpacity = Math.max(0, 1 - zoomProgress / 0.9);
+      const doorProgress = Math.min(
+        easedProgress / ANIMATION_CONFIG.doorPhaseRatio,
+        1
+      );
+      const serviceBox = getServiceBoxDimensions(this.court);
+      const slideDistance = doorProgress * serviceBox.width * 0.85;
+
+      this.ctx.globalAlpha = doorOpacity;
+      this.drawServiceBoxDoor("left", slideDistance, serviceBox);
+      this.drawServiceBoxDoor("right", slideDistance, serviceBox);
+      this.ctx.globalAlpha = 1;
+    }
+
+    this.ctx.restore();
+
+    // Dessiner le filet
+    if (zoomProgress > ANIMATION_CONFIG.netStartRatio) {
+      const netProgress =
+        (zoomProgress - ANIMATION_CONFIG.netStartRatio) /
+        (1 - ANIMATION_CONFIG.netStartRatio);
+      const smoothNetProgress = 1 - Math.pow(1 - netProgress, 3);
+      drawTennisNet(
+        this.ctx,
+        this.canvas.width,
+        this.canvas.height,
+        smoothNetProgress
+      );
+    }
+  }
+}
+
+// ==================== INITIALISATION ====================
+
 function animateDoorOpening(canvas: HTMLCanvasElement) {
+  const animation = new RolandGarrosAnimation(canvas);
+  animation.start();
+}
+
+function drawFrame(canvas: HTMLCanvasElement) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
-  // Dimensions du cadre tableau
-  const frameWidth = canvas.width * 0.9;
-  const frameHeight = canvas.height * 0.8;
-  const frameStartX = (canvas.width - frameWidth) / 2;
-  const frameStartY = (canvas.height - frameHeight) / 2;
+  const frame = getFrameDimensions(canvas);
 
-  // Calculer les dimensions du terrain
-  const courtWidth = frameWidth * 0.85;
-  const courtHeight = frameHeight * 0.8;
-  const startX = frameStartX + (frameWidth - courtWidth) / 2;
-  const startY = frameStartY + (frameHeight - courtHeight) / 2;
-  const singleCourtHeight = courtHeight * 0.77;
-  const singleStartY = startY + (courtHeight - singleCourtHeight) / 2;
-  const serviceLineDistance = courtWidth * 0.25;
-  const centerX = startX + courtWidth / 2;
-  const centerY = startY + courtHeight / 2;
-  const serviceBoxWidth = centerX - (startX + serviceLineDistance);
-  const serviceBoxHeight = centerY - singleStartY;
+  // Dessiner le mur blanc autour du cadre
+  ctx.fillStyle = COLORS.white;
 
-  // TEXTURE TERRE BATTUE DÉSACTIVÉE
-  // Créer seulement un fond de base uni sans texture terre battue
-  const textureCanvas = document.createElement("canvas");
-  textureCanvas.width = canvas.width;
-  textureCanvas.height = canvas.height;
-  const textureCtx = textureCanvas.getContext("2d");
+  // Murs autour du cadre
+  ctx.fillRect(0, 0, canvas.width, frame.startY); // Haut
+  ctx.fillRect(
+    0,
+    frame.startY + frame.height,
+    canvas.width,
+    canvas.height - (frame.startY + frame.height)
+  ); // Bas
+  ctx.fillRect(0, frame.startY, frame.startX, frame.height); // Gauche
+  ctx.fillRect(
+    frame.startX + frame.width,
+    frame.startY,
+    canvas.width - (frame.startX + frame.width),
+    frame.height
+  ); // Droite
 
-  // Fond de base uni couleur terre battue (sans texture)
-  if (textureCtx) {
-    textureCtx.fillStyle = "#C95917"; // Couleur de base terre battue unie
-    textureCtx.fillRect(0, 0, canvas.width, canvas.height);
-  }
+  // Cadre principal (bordure dorée)
+  ctx.strokeStyle = COLORS.frameGold;
+  ctx.lineWidth = frame.thickness;
+  ctx.strokeRect(frame.startX, frame.startY, frame.width, frame.height);
 
-  // Canvas vide pour remplacer la texture terre battue
-  const clayTextureCanvas = document.createElement("canvas");
-  clayTextureCanvas.width = canvas.width;
-  clayTextureCanvas.height = canvas.height;
-  // Laisser le canvas complètement transparent (pas de texture terre battue)
-
-  // Créer les textures des portes une seule fois
-  const leftDoorCanvas = document.createElement("canvas");
-  leftDoorCanvas.width = serviceBoxWidth;
-  leftDoorCanvas.height = serviceBoxHeight * 2;
-  const leftDoorCtx = leftDoorCanvas.getContext("2d");
-
-  const rightDoorCanvas = document.createElement("canvas");
-  rightDoorCanvas.width = serviceBoxWidth;
-  rightDoorCanvas.height = serviceBoxHeight * 2;
-  const rightDoorCtx = rightDoorCanvas.getContext("2d");
-
-  if (leftDoorCtx) {
-    // TEXTURE TERRE BATTUE DÉSACTIVÉE SUR LES PORTES
-    // Appliquer seulement un fond orange uni sans texture
-    leftDoorCtx.fillStyle = "#C95917"; // Couleur orange unie
-    leftDoorCtx.fillRect(0, 0, serviceBoxWidth, serviceBoxHeight * 2);
-  }
-  if (rightDoorCtx) {
-    // TEXTURE TERRE BATTUE DÉSACTIVÉE SUR LES PORTES
-    // Appliquer seulement un fond orange uni sans texture
-    rightDoorCtx.fillStyle = "#C95917"; // Couleur orange unie
-    rightDoorCtx.fillRect(0, 0, serviceBoxWidth, serviceBoxHeight * 2);
-  }
-
-  let animationProgress = 0;
-  const animationDuration = 7000; // Durée encore plus augmentée pour animation plus lente
-  const startTime = Date.now();
-
-  function animate() {
-    if (!ctx) return;
-
-    const currentTime = Date.now();
-    const elapsed = currentTime - startTime;
-    animationProgress = Math.min(elapsed / animationDuration, 1);
-
-    // Easing ultra-smooth pour le zoom avec courbe de Bézier
-    const easeInOutSine = (t: number) => -(Math.cos(Math.PI * t) - 1) / 2;
-
-    const easedProgress = easeInOutSine(animationProgress);
-
-    // Calculer les dimensions du terrain
-    const frameWidth = canvas.width * 0.9;
-    const frameHeight = canvas.height * 0.8;
-    const frameStartX = (canvas.width - frameWidth) / 2;
-    const frameStartY = (canvas.height - frameHeight) / 2;
-
-    const courtWidth = frameWidth * 0.85;
-    const courtHeight = frameHeight * 0.8;
-    const startX = frameStartX + (frameWidth - courtWidth) / 2;
-    const startY = frameStartY + (frameHeight - courtHeight) / 2;
-    const singleCourtHeight = courtHeight * 0.77;
-    const singleStartY = startY + (courtHeight - singleCourtHeight) / 2;
-    const serviceLineDistance = courtWidth * 0.25;
-    const centerX = startX + courtWidth / 2;
-    const centerY = startY + courtHeight / 2;
-
-    // Dimensions des carrés de service
-    const serviceBoxWidth = centerX - (startX + serviceLineDistance);
-    const serviceBoxHeight = centerY - singleStartY;
-
-    // Effacer le canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Dessiner le cadre et le mur blanc
-    drawFrame(canvas);
-
-    // Dès le début de l'animation, créer les zones vertes
-    // 1. D'abord dessiner le fond et les textures terre battue partout SAUF dans les zones vertes
-    ctx.save();
-
-    // Créer un chemin de découpe qui exclut les zones vertes
-    ctx.beginPath();
-    // Rectangle du canvas complet
-    ctx.rect(0, 0, canvas.width, canvas.height);
-    // Soustraire les zones vertes (holes dans le masque)
-    ctx.rect(
-      startX + serviceLineDistance,
-      singleStartY,
-      serviceBoxWidth,
-      serviceBoxHeight * 2
-    );
-    ctx.rect(centerX, singleStartY, serviceBoxWidth, serviceBoxHeight * 2);
-    ctx.clip("evenodd"); // evenodd permet les "trous"
-
-    // Appliquer le fond de base orange (seulement dans les zones autorisées par le masque)
-    if (textureCanvas) {
-      ctx.drawImage(textureCanvas, 0, 0);
-    }
-
-    // Appliquer la texture terre battue (seulement dans les zones autorisées par le masque)
-    if (clayTextureCanvas) {
-      ctx.drawImage(clayTextureCanvas, 0, 0);
-    }
-
-    ctx.restore(); // Retirer le masque
-
-    // 2. Dessiner les zones vertes avec couleur unie (sans texture)
-    ctx.fillStyle = "#00503C"; // Vert uni
-    ctx.fillRect(
-      startX + serviceLineDistance,
-      singleStartY,
-      serviceBoxWidth,
-      serviceBoxHeight * 2
-    );
-    ctx.fillRect(centerX, singleStartY, serviceBoxWidth, serviceBoxHeight * 2);
-
-    // Redessiner le terrain de base - garder les lignes visibles seulement dans les zones orange
-    // Dès le début de l'animation, éviter les lignes dans les zones vertes
-    drawTennisCourtLines(canvas, false, 1);
-
-    // Distance de glissement horizontal des portes (phase initiale très lente)
-    const doorPhaseProgress = Math.min(easedProgress / 0.9, 1); // Étendre la phase des portes à 90% (très lent)
-    const maxSlideDistance = serviceBoxWidth * 0.85; // Distance légèrement augmentée
-    const currentSlideDistance = doorPhaseProgress * maxSlideDistance;
-
-    // Si l'animation est avancée (plus de 50%), commencer le zoom avec une transition ultra-douce
-    if (easedProgress > 0.5) {
-      const zoomProgress = (easedProgress - 0.5) / 0.5; // Normaliser sur les 50% restants
-      const smoothZoomProgress = easeInOutSine(zoomProgress); // Utiliser l'easing ultra-doux
-      const zoomFactor = 1 + smoothZoomProgress * 20; // Zoom plus puissant jusqu'à 21x
-
-      // Centre du zoom : milieu de la zone des carrés de service
-      const zoomCenterX = centerX;
-      const zoomCenterY = centerY;
-
-      // Appliquer la transformation de zoom
-      ctx.save();
-      ctx.translate(zoomCenterX, zoomCenterY);
-      ctx.scale(zoomFactor, zoomFactor);
-      ctx.translate(-zoomCenterX, -zoomCenterY);
-
-      // Redessiner tout le terrain avec le zoom appliqué
-      // Maintenir les zones vertes pendant le zoom (après l'ouverture des portes)
-
-      // 1. D'abord dessiner le fond et les textures terre battue partout SAUF dans les zones vertes
-      ctx.save();
-
-      // Créer un chemin de découpe qui exclut les zones vertes
-      ctx.beginPath();
-      // Rectangle du canvas complet
-      ctx.rect(0, 0, canvas.width, canvas.height);
-      // Soustraire les zones vertes (holes dans le masque)
-      ctx.rect(
-        startX + serviceLineDistance,
-        singleStartY,
-        serviceBoxWidth,
-        serviceBoxHeight * 2
-      );
-      ctx.rect(centerX, singleStartY, serviceBoxWidth, serviceBoxHeight * 2);
-      ctx.clip("evenodd"); // evenodd permet les "trous"
-
-      // Appliquer le fond de base orange (seulement dans les zones autorisées par le masque)
-      if (textureCanvas) {
-        ctx.drawImage(textureCanvas, 0, 0);
-      }
-
-      // Appliquer la texture terre battue (seulement dans les zones autorisées par le masque)
-      if (clayTextureCanvas) {
-        ctx.drawImage(clayTextureCanvas, 0, 0);
-      }
-
-      ctx.restore(); // Retirer le masque
-
-      // 2. Dessiner les zones vertes avec couleur unie (sans texture)
-      ctx.fillStyle = "#00503C"; // Vert uni
-      ctx.fillRect(
-        startX + serviceLineDistance,
-        singleStartY,
-        serviceBoxWidth,
-        serviceBoxHeight * 2
-      );
-      ctx.fillRect(
-        centerX,
-        singleStartY,
-        serviceBoxWidth,
-        serviceBoxHeight * 2
-      );
-
-      drawTennisCourtLines(canvas, false, 1); // Mode normal avec zones vertes, opacité complète
-
-      // Dessiner les portes avec le zoom (transition ultra-progressive)
-      if (zoomProgress < 0.9) {
-        // Garder les portes visibles plus longtemps
-        const doorSlideProgress = Math.min(easedProgress / 0.9, 1); // Phase des portes étendue à 90%
-        const doorSlideDistance = doorSlideProgress * serviceBoxWidth * 0.85;
-
-        // Facteur d'opacité progressive pour les portes
-        const doorOpacity = Math.max(0, 1 - zoomProgress / 0.9);
-
-        // PORTE GAUCHE avec opacité
-        const leftDoorX = startX + serviceLineDistance - doorSlideDistance;
-        if (leftDoorX + serviceBoxWidth > startX + serviceLineDistance) {
-          ctx.globalAlpha = doorOpacity;
-          // Utiliser la texture pré-créée de la porte gauche
-          if (leftDoorCanvas) {
-            ctx.drawImage(leftDoorCanvas, leftDoorX, singleStartY);
-          }
-          ctx.strokeStyle = "#FFFFFF";
-          ctx.lineWidth = 3;
-          ctx.strokeRect(
-            leftDoorX,
-            singleStartY,
-            serviceBoxWidth,
-            serviceBoxHeight * 2
-          );
-          ctx.beginPath();
-          ctx.moveTo(leftDoorX, centerY);
-          ctx.lineTo(leftDoorX + serviceBoxWidth, centerY);
-          ctx.stroke();
-          ctx.globalAlpha = 1;
-        }
-
-        // PORTE DROITE avec opacité
-        const rightDoorX = centerX + doorSlideDistance;
-        if (rightDoorX < centerX + serviceBoxWidth) {
-          ctx.globalAlpha = doorOpacity;
-          // Utiliser la texture pré-créée de la porte droite
-          if (rightDoorCanvas) {
-            ctx.drawImage(rightDoorCanvas, rightDoorX, singleStartY);
-          }
-          ctx.strokeStyle = "#FFFFFF";
-          ctx.lineWidth = 3;
-          ctx.strokeRect(
-            rightDoorX,
-            singleStartY,
-            serviceBoxWidth,
-            serviceBoxHeight * 2
-          );
-          ctx.beginPath();
-          ctx.moveTo(rightDoorX, centerY);
-          ctx.lineTo(rightDoorX + serviceBoxWidth, centerY);
-          ctx.stroke();
-          ctx.globalAlpha = 1;
-        }
-      }
-
-      ctx.restore();
-
-      // Dessiner le filet progressivement à partir de 70% de l'animation
-      if (zoomProgress > 0.7) {
-        const netProgress = (zoomProgress - 0.7) / 0.3; // Animation du filet sur les 30% finaux
-        // Transition ultra-douce avec easing exponentiel
-        const smoothNetProgress = 1 - Math.pow(1 - netProgress, 3);
-        drawTennisNet(ctx, canvas.width, canvas.height, smoothNetProgress);
-      }
-
-      // Continuer l'animation si elle n'est pas terminée
-      if (animationProgress < 1) {
-        requestAnimationFrame(animate);
-      }
-      return;
-    }
-
-    // PORTE GAUCHE - Glisse vers la gauche
-    // Position de la porte gauche (glisse vers la gauche)
-    const leftDoorX = startX + serviceLineDistance - currentSlideDistance;
-    const leftDoorY = singleStartY;
-    const leftDoorWidth = serviceBoxWidth;
-    const leftDoorHeight = serviceBoxHeight * 2;
-
-    // Dessiner la porte gauche seulement si elle est encore visible
-    if (leftDoorX + leftDoorWidth > startX + serviceLineDistance) {
-      // Utiliser la texture pré-créée de la porte gauche
-      if (leftDoorCanvas) {
-        ctx.drawImage(leftDoorCanvas, leftDoorX, leftDoorY);
-      }
-
-      // Bordure de la porte gauche
-      ctx.strokeStyle = "#FFFFFF";
-      ctx.lineWidth = 3;
-      ctx.strokeRect(leftDoorX, leftDoorY, leftDoorWidth, leftDoorHeight);
-
-      // Ligne de séparation au milieu de la porte gauche
-      ctx.beginPath();
-      ctx.moveTo(leftDoorX, centerY);
-      ctx.lineTo(leftDoorX + leftDoorWidth, centerY);
-      ctx.stroke();
-    }
-
-    // PORTE DROITE - Glisse vers la droite
-    // Position de la porte droite (glisse vers la droite)
-    const rightDoorX = centerX + currentSlideDistance;
-    const rightDoorY = singleStartY;
-    const rightDoorWidth = serviceBoxWidth;
-    const rightDoorHeight = serviceBoxHeight * 2;
-
-    // Dessiner la porte droite seulement si elle est encore visible
-    if (rightDoorX < centerX + serviceBoxWidth) {
-      // Utiliser la texture pré-créée de la porte droite
-      if (rightDoorCanvas) {
-        ctx.drawImage(rightDoorCanvas, rightDoorX, rightDoorY);
-      }
-
-      // Bordure de la porte droite
-      ctx.strokeStyle = "#FFFFFF";
-      ctx.lineWidth = 3;
-      ctx.strokeRect(rightDoorX, rightDoorY, rightDoorWidth, rightDoorHeight);
-
-      // Ligne de séparation au milieu de la porte droite
-      ctx.beginPath();
-      ctx.moveTo(rightDoorX, centerY);
-      ctx.lineTo(rightDoorX + rightDoorWidth, centerY);
-      ctx.stroke();
-    }
-
-    // Continuer l'animation si elle n'est pas terminée
-    if (animationProgress < 1) {
-      requestAnimationFrame(animate);
-    }
-  }
-
-  // Démarrer l'animation après un délai pour profiter de la vue tableau
-  setTimeout(() => {
-    animate();
-  }, 2000);
+  // Cadre intérieur (ombre)
+  ctx.strokeStyle = COLORS.frameShadow;
+  ctx.lineWidth = 8;
+  ctx.strokeRect(
+    frame.startX + frame.thickness / 2,
+    frame.startY + frame.thickness / 2,
+    frame.width - frame.thickness,
+    frame.height - frame.thickness
+  );
 }
 
 function drawTennisNet(
@@ -497,175 +537,156 @@ function drawTennisNet(
   canvasHeight: number,
   animationProgress: number = 1
 ) {
-  const netWidth = canvasWidth; // Prendre toute la largeur de l'écran
-  const netHeight = canvasHeight * 0.2; // Filet un peu plus haut
-  const startX = 0; // Commencer au bord gauche
-  const startY = (canvasHeight - netHeight) / 2; // Centré verticalement
+  const netConfig = {
+    width: canvasWidth,
+    height: canvasHeight * 0.2,
+    startX: 0,
+    startY: (canvasHeight - canvasHeight * 0.2) / 2,
+    bandHeight: 12,
+    sagAmount: 8,
+    centralBandWidth: 8,
+    meshSize: 15,
+  };
 
   ctx.save();
 
-  // Animation ultra-douce avec transition progressive
-  const easeInOutCubic = (t: number) =>
-    t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   const easeProgress = easeInOutCubic(animationProgress);
-
-  // Opacité progressive très douce
   ctx.globalAlpha = easeProgress;
 
-  // Transformation d'échelle progressive pour un effet d'apparition naturel
+  // Transformation d'échelle progressive
   ctx.translate(canvasWidth / 2, canvasHeight / 2);
-  const scaleProgress = 0.3 + easeProgress * 0.7; // Commence à 30% de la taille et grandit progressivement
+  const scaleProgress = 0.3 + easeProgress * 0.7;
   ctx.scale(scaleProgress, scaleProgress);
   ctx.translate(-canvasWidth / 2, -canvasHeight / 2);
 
-  // PAS DE POTEAUX - seulement le filet central
+  drawNetBand(ctx, netConfig);
+  drawNetCentralBand(ctx, netConfig);
 
-  // BANDE BLANCHE EN HAUT avec courbure réaliste
-  const bandHeight = 12; // Bande moins épaisse
-  const centerX = startX + netWidth / 2;
-  const sagAmount = 8; // Affaissement au centre du filet (réaliste)
-
-  ctx.fillStyle = "#FFFFFF";
-
-  // Dessiner la bande courbe en utilisant une courbe quadratique
-  ctx.beginPath();
-  ctx.moveTo(startX, startY);
-  ctx.quadraticCurveTo(centerX, startY + sagAmount, startX + netWidth, startY);
-  ctx.lineTo(startX + netWidth, startY + bandHeight + sagAmount / 2);
-  ctx.quadraticCurveTo(
-    centerX,
-    startY + bandHeight + sagAmount + sagAmount / 2,
-    startX,
-    startY + bandHeight + sagAmount / 2
-  );
-  ctx.closePath();
-  ctx.fill();
-
-  // BANDE CENTRALE VERTICALE (caractéristique des filets de tennis)
-  const centralBandWidth = 8;
-  const centralBandX = startX + netWidth / 2; // Au milieu du filet
-  ctx.fillStyle = "#FFFFFF";
-  ctx.fillRect(
-    centralBandX - centralBandWidth / 2,
-    startY,
-    centralBandWidth,
-    netHeight
-  );
-
-  // MAILLAGE SIMPLE EN DESSOUS qui suit la courbure (apparition progressive)
   if (animationProgress > 0.3) {
-    // Le maillage n'apparaît qu'après 30% de l'animation
-    const meshStartY = startY + bandHeight + sagAmount / 2;
-    const meshHeight = netHeight - bandHeight - sagAmount / 2;
-    const meshSize = 15; // Espacement du maillage
-    const meshProgress = Math.min((animationProgress - 0.3) / 0.7, 1); // Normaliser la progression du maillage
-
-    ctx.strokeStyle = "#FFFFFF";
-    ctx.lineWidth = 2;
-    ctx.globalAlpha = easeProgress * meshProgress; // Opacité du maillage progressive
-
-    // Lignes verticales du maillage qui suivent la courbure du filet
-    for (let x = startX; x <= startX + netWidth; x += meshSize) {
-      // Éviter de dessiner sur la bande centrale verticale
-      if (Math.abs(x - centralBandX) > centralBandWidth / 2) {
-        const progress = (x - startX) / netWidth; // Position relative (0 à 1)
-        const curveOffset = sagAmount * Math.sin(progress * Math.PI); // Courbure sinusoïdale
-
-        ctx.beginPath();
-        ctx.moveTo(x, meshStartY + curveOffset);
-        ctx.lineTo(x, meshStartY + meshHeight + curveOffset);
-        ctx.stroke();
-      }
-    }
-
-    // Lignes horizontales du maillage qui suivent la courbure
-    for (let y = meshStartY; y <= meshStartY + meshHeight; y += meshSize) {
-      ctx.beginPath();
-      ctx.moveTo(startX, y);
-      ctx.quadraticCurveTo(centerX, y + sagAmount / 2, startX + netWidth, y);
-      ctx.stroke();
-    }
+    drawNetMesh(ctx, netConfig, animationProgress, easeProgress);
   }
 
-  // Restaurer l'opacité pour les contours
-  ctx.globalAlpha = easeProgress;
-
-  // Contour du filet avec courbure (sans contours latéraux pour masquer les bords)
-  ctx.strokeStyle = "#FFFFFF";
-  ctx.lineWidth = 4;
-
-  // Contour supérieur (courbe)
-  ctx.beginPath();
-  ctx.moveTo(startX, startY);
-  ctx.quadraticCurveTo(centerX, startY + sagAmount, startX + netWidth, startY);
-  ctx.stroke();
-
-  // Contour inférieur (courbe)
-  ctx.beginPath();
-  ctx.moveTo(startX, startY + netHeight);
-  ctx.quadraticCurveTo(
-    centerX,
-    startY + netHeight + sagAmount,
-    startX + netWidth,
-    startY + netHeight
-  );
-  ctx.stroke();
+  drawNetContours(ctx, netConfig, easeProgress);
 
   ctx.restore();
 }
 
-function drawFrame(canvas: HTMLCanvasElement) {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+function drawNetBand(ctx: CanvasRenderingContext2D, config: any) {
+  const centerX = config.startX + config.width / 2;
 
-  // Dimensions du cadre tableau
-  const frameWidth = canvas.width * 0.9;
-  const frameHeight = canvas.height * 0.8;
-  const frameStartX = (canvas.width - frameWidth) / 2;
-  const frameStartY = (canvas.height - frameHeight) / 2;
-  const frameThickness = 20;
+  ctx.fillStyle = COLORS.white;
+  ctx.beginPath();
+  ctx.moveTo(config.startX, config.startY);
+  ctx.quadraticCurveTo(
+    centerX,
+    config.startY + config.sagAmount,
+    config.startX + config.width,
+    config.startY
+  );
+  ctx.lineTo(
+    config.startX + config.width,
+    config.startY + config.bandHeight + config.sagAmount / 2
+  );
+  ctx.quadraticCurveTo(
+    centerX,
+    config.startY + config.bandHeight + config.sagAmount + config.sagAmount / 2,
+    config.startX,
+    config.startY + config.bandHeight + config.sagAmount / 2
+  );
+  ctx.closePath();
+  ctx.fill();
+}
 
-  // Dessiner le mur blanc autour du cadre
-  ctx.fillStyle = "#FFFFFF";
-
-  // Mur supérieur
-  ctx.fillRect(0, 0, canvas.width, frameStartY);
-
-  // Mur inférieur
+function drawNetCentralBand(ctx: CanvasRenderingContext2D, config: any) {
+  const centralBandX = config.startX + config.width / 2;
+  ctx.fillStyle = COLORS.white;
   ctx.fillRect(
-    0,
-    frameStartY + frameHeight,
-    canvas.width,
-    canvas.height - (frameStartY + frameHeight)
+    centralBandX - config.centralBandWidth / 2,
+    config.startY,
+    config.centralBandWidth,
+    config.height
   );
+}
 
-  // Mur gauche
-  ctx.fillRect(0, frameStartY, frameStartX, frameHeight);
+function drawNetMesh(
+  ctx: CanvasRenderingContext2D,
+  config: any,
+  animationProgress: number,
+  easeProgress: number
+) {
+  const meshStartY = config.startY + config.bandHeight + config.sagAmount / 2;
+  const meshHeight = config.height - config.bandHeight - config.sagAmount / 2;
+  const meshProgress = Math.min((animationProgress - 0.3) / 0.7, 1);
+  const centerX = config.startX + config.width / 2;
+  const centralBandX = config.startX + config.width / 2;
 
-  // Mur droite
-  ctx.fillRect(
-    frameStartX + frameWidth,
-    frameStartY,
-    canvas.width - (frameStartX + frameWidth),
-    frameHeight
+  ctx.strokeStyle = COLORS.white;
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = easeProgress * meshProgress;
+
+  // Lignes verticales
+  for (
+    let x = config.startX;
+    x <= config.startX + config.width;
+    x += config.meshSize
+  ) {
+    if (Math.abs(x - centralBandX) > config.centralBandWidth / 2) {
+      const progress = (x - config.startX) / config.width;
+      const curveOffset = config.sagAmount * Math.sin(progress * Math.PI);
+
+      ctx.beginPath();
+      ctx.moveTo(x, meshStartY + curveOffset);
+      ctx.lineTo(x, meshStartY + meshHeight + curveOffset);
+      ctx.stroke();
+    }
+  }
+
+  // Lignes horizontales
+  for (let y = meshStartY; y <= meshStartY + meshHeight; y += config.meshSize) {
+    ctx.beginPath();
+    ctx.moveTo(config.startX, y);
+    ctx.quadraticCurveTo(
+      centerX,
+      y + config.sagAmount / 2,
+      config.startX + config.width,
+      y
+    );
+    ctx.stroke();
+  }
+}
+
+function drawNetContours(
+  ctx: CanvasRenderingContext2D,
+  config: any,
+  easeProgress: number
+) {
+  const centerX = config.startX + config.width / 2;
+
+  ctx.globalAlpha = easeProgress;
+  ctx.strokeStyle = COLORS.white;
+  ctx.lineWidth = 4;
+
+  // Contour supérieur
+  ctx.beginPath();
+  ctx.moveTo(config.startX, config.startY);
+  ctx.quadraticCurveTo(
+    centerX,
+    config.startY + config.sagAmount,
+    config.startX + config.width,
+    config.startY
   );
+  ctx.stroke();
 
-  // Dessiner le cadre du tableau (bordure dorée)
-  ctx.strokeStyle = "#D4AF37"; // Couleur dorée
-  ctx.lineWidth = frameThickness;
-  ctx.strokeRect(frameStartX, frameStartY, frameWidth, frameHeight);
-
-  // Cadre intérieur (ombre)
-  ctx.strokeStyle = "#B8860B"; // Doré plus foncé pour l'ombre
-  ctx.lineWidth = 8;
-  ctx.strokeRect(
-    frameStartX + frameThickness / 2,
-    frameStartY + frameThickness / 2,
-    frameWidth - frameThickness,
-    frameHeight - frameThickness
+  // Contour inférieur
+  ctx.beginPath();
+  ctx.moveTo(config.startX, config.startY + config.height);
+  ctx.quadraticCurveTo(
+    centerX,
+    config.startY + config.height + config.sagAmount,
+    config.startX + config.width,
+    config.startY + config.height
   );
-
-  // Texte "ROLAND GARROS" supprimé
+  ctx.stroke();
 }
 
 const canvasElement = document.getElementById("canvas") as HTMLCanvasElement;
@@ -673,19 +694,32 @@ if (canvasElement) {
   canvasElement.width = window.innerWidth;
   canvasElement.height = window.innerHeight;
 
-  // Créer le rendu initial avec terrain entièrement orange
+  // Initialiser avec le rendu initial
   const ctx = canvasElement.getContext("2d");
   if (ctx) {
-    // Dessiner le cadre et le mur blanc
+    const frame = getFrameDimensions(canvasElement);
+
     drawFrame(canvasElement);
 
-    // Rendu initial : terrain entièrement orange (pas de zones vertes)
-    ctx.fillStyle = "#C95917";
-    ctx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+    // Masque pour le rendu initial
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(
+      frame.startX + frame.thickness,
+      frame.startY + frame.thickness,
+      frame.width - 2 * frame.thickness,
+      frame.height - 2 * frame.thickness
+    );
+    ctx.clip();
 
-    drawTennisCourtLines(canvasElement, true, 1); // Rendu initial avec toutes les lignes visibles, opacité complète
+    ctx.fillStyle = COLORS.clay;
+    ctx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+    drawTennisCourtLines(canvasElement, true, 1);
+
+    ctx.restore();
   }
 
+  // Démarrer l'animation
   animateDoorOpening(canvasElement);
   drawFrame(canvasElement);
 }
