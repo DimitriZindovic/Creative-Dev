@@ -15,4 +15,4 @@ npm run dev
 
 ---
 
-**Créé par Dimitri ZINDOVIC**
+**Dimitri ZINDOVIC**
