@@ -119,10 +119,12 @@ export class RolandGarrosAnimation {
       easedProgress / ANIMATION_CONFIG.doorPhaseRatio,
       1
     );
+    const smoothDoorProgress =
+      doorProgress * doorProgress * (3 - 2 * doorProgress);
 
     const serviceBox = getServiceBoxDimensions(this.court);
     const maxSlideDistance = serviceBox.width * 0.85;
-    const currentSlideDistance = doorProgress * maxSlideDistance;
+    const currentSlideDistance = smoothDoorProgress * maxSlideDistance;
 
     this.drawServiceBoxDoor("left", currentSlideDistance, serviceBox);
     this.drawServiceBoxDoor("right", currentSlideDistance, serviceBox);
@@ -215,7 +217,9 @@ export class RolandGarrosAnimation {
         1
       );
       const serviceBox = getServiceBoxDimensions(this.court);
-      const slideDistance = doorProgress * serviceBox.width * 0.85;
+      const smoothDoorProgress =
+        doorProgress * doorProgress * (3 - 2 * doorProgress);
+      const slideDistance = smoothDoorProgress * serviceBox.width * 0.85;
 
       this.ctx.globalAlpha = doorOpacity;
       this.drawServiceBoxDoor("left", slideDistance, serviceBox);
