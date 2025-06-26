@@ -4,11 +4,34 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Roland Garros</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <title>Roland Garros 2025</title>
   </head>
   <body>
     <div class="app">
       <canvas id="canvas" class="canvas"></canvas>
+
+      <div class="overlay">
+        <div class="logo-container">
+          <img src="/roland-garros-logo.png" alt="Roland Garros" class="logo" />
+        </div>
+
+        <div class="title-container">
+          <h1 class="title">ROLAND GARROS</h1>
+          <div class="year">2025</div>
+        </div>
+
+        <div class="net-overlay">
+          <div class="net-band"></div>
+          <div class="net-central-band"></div>
+          <div class="net-mesh"></div>
+        </div>
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
